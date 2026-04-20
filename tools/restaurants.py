@@ -1,16 +1,24 @@
-import requests
 import uuid
+import googlemaps
 from langchain_core.tools import tool
-from config.settings import YELP_API_KEY
-
-YELP_API_BASE = "https://api.yelp.com/v3"
+from config.settings import GOOGLE_MAPS_API_KEY
 
 # In-memory reservation store (in production, persist to a database)
 _reservations: dict[str, dict] = {}
 
+PRICE_LEVEL = {0: "Free", 1: "$", 2: "$$", 3: "$$$", 4: "$$$$"}
 
-def _yelp_headers() -> dict:
-    return {"Authorization": f"Bearer {YELP_API_KEY}"}
+
+def _gmaps() -> googlemaps.Client:
+    return googlemaps.Client(key=GOOGLE_MAPS_API_KEY)
+
+
+def _geocode(location: str) -> tuple[float, float]:
+    result = _gmaps().geocode(location)
+    if not result:
+        raise ValueError(f"Could not geocode: {location}")
+    loc = result[0]["geometry"]["location"]
+    return loc["lat"], loc["lng"]
 
 
 @tool
@@ -20,45 +28,49 @@ def search_restaurants(
     price_range: str = "",
     limit: int = 8,
 ) -> str:
-    """Search for restaurants in a location using Yelp.
+    """Search for restaurants using Google Maps Places API.
 
     Args:
         location: City or address (e.g. "Paris, France", "Shibuya, Tokyo")
-        cuisine: Food type (e.g. "french", "sushi", "italian", "local")
-        price_range: Price level "1" (cheap) to "4" (expensive), comma-separated for multiple
-        limit: Max number of results
+        cuisine: Food type keyword (e.g. "french", "sushi", "italian", "local")
+        price_range: Price level "1" (cheap) to "4" (expensive)
+        limit: Max number of results (max 20)
     """
     try:
-        params: dict = {
-            "location": location,
-            "categories": cuisine if cuisine else "restaurants",
-            "sort_by": "rating",
-            "limit": limit,
-        }
-        if price_range:
-            params["price"] = price_range
+        gmaps = _gmaps()
+        lat, lng = _geocode(location)
 
-        resp = requests.get(
-            f"{YELP_API_BASE}/businesses/search",
-            headers=_yelp_headers(),
-            params=params,
-            timeout=10,
+        keyword = cuisine if cuisine else "restaurant"
+        resp = gmaps.places_nearby(
+            location=(lat, lng),
+            radius=3000,
+            type="restaurant",
+            keyword=keyword,
+            rank_by="prominence",
         )
-        resp.raise_for_status()
-        businesses = resp.json().get("businesses", [])
+
+        places = resp.get("results", [])[:limit]
+        if not places:
+            return "No restaurants found."
+
+        # Filter by price level if specified
+        if price_range:
+            target_price = int(price_range)
+            places = [p for p in places if p.get("price_level", -1) <= target_price] or places
 
         results = []
-        for b in businesses:
-            price = b.get("price", "N/A")
-            rating = b.get("rating", "N/A")
-            cats = ", ".join(c["title"] for c in b.get("categories", []))
-            address = ", ".join(b.get("location", {}).get("display_address", []))
+        for p in places:
+            price = PRICE_LEVEL.get(p.get("price_level", -1), "N/A")
+            rating = p.get("rating", "N/A")
+            address = p.get("vicinity", "N/A")
+            open_now = p.get("opening_hours", {}).get("open_now")
+            status = "Open now" if open_now else ("Closed" if open_now is False else "Hours N/A")
             results.append(
-                f"**{b['name']}** | {cats} | Rating: {rating}/5 | Price: {price}\n"
-                f"  Address: {address} | ID: {b['id']}"
+                f"**{p['name']}** | Rating: {rating}/5 | Price: {price} | {status}\n"
+                f"  Address: {address} | Place ID: {p['place_id']}"
             )
 
-        return "\n".join(results) if results else "No restaurants found."
+        return "\n".join(results)
     except Exception as e:
         return f"Restaurant search error: {str(e)}"
 
@@ -66,43 +78,56 @@ def search_restaurants(
 @tool
 def search_workout_areas(
     location: str,
-    workout_type: str = "running,gyms,hiking",
+    workout_type: str = "gym",
     limit: int = 6,
 ) -> str:
-    """Search for workout areas including running paths, trails, and gyms.
+    """Search for workout areas including gyms, running parks, and hiking trails
+    using Google Maps Places API.
 
     Args:
         location: City or neighborhood (e.g. "Paris, France")
-        workout_type: Comma-separated Yelp categories such as "running,gyms,hiking,yoga,parks"
+        workout_type: One of "gym", "park", "hiking", "yoga", "running" or any keyword
         limit: Max number of results
     """
     try:
-        params = {
-            "location": location,
-            "categories": workout_type,
-            "sort_by": "rating",
-            "limit": limit,
+        gmaps = _gmaps()
+        lat, lng = _geocode(location)
+
+        # Map workout type to Google Maps place type
+        place_type_map = {
+            "gym": "gym",
+            "yoga": "gym",
+            "park": "park",
+            "hiking": "park",
+            "running": "park",
         }
-        resp = requests.get(
-            f"{YELP_API_BASE}/businesses/search",
-            headers=_yelp_headers(),
-            params=params,
-            timeout=10,
+        place_type = place_type_map.get(workout_type.lower(), "gym")
+        keyword = workout_type if workout_type not in place_type_map else None
+
+        resp = gmaps.places_nearby(
+            location=(lat, lng),
+            radius=5000,
+            type=place_type,
+            keyword=keyword,
+            rank_by="prominence",
         )
-        resp.raise_for_status()
-        businesses = resp.json().get("businesses", [])
+
+        places = resp.get("results", [])[:limit]
+        if not places:
+            return f"No {workout_type} areas found near {location}."
 
         results = []
-        for b in businesses:
-            rating = b.get("rating", "N/A")
-            cats = ", ".join(c["title"] for c in b.get("categories", []))
-            address = ", ".join(b.get("location", {}).get("display_address", []))
+        for p in places:
+            rating = p.get("rating", "N/A")
+            address = p.get("vicinity", "N/A")
+            open_now = p.get("opening_hours", {}).get("open_now")
+            status = "Open now" if open_now else ("Closed" if open_now is False else "")
             results.append(
-                f"**{b['name']}** | {cats} | Rating: {rating}/5\n"
+                f"**{p['name']}** | Rating: {rating}/5 | {status}\n"
                 f"  Address: {address}"
             )
 
-        return "\n".join(results) if results else "No workout areas found."
+        return "\n".join(results)
     except Exception as e:
         return f"Workout area search error: {str(e)}"
 

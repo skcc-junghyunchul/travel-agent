@@ -45,7 +45,6 @@ Edit `.env` and fill in each key:
 | `TAVILY_API_KEY` | https://app.tavily.com |
 | `DUFFEL_API_KEY` | https://app.duffel.com → Settings → Access tokens (use `duffel_test_...`) |
 | `GOOGLE_MAPS_API_KEY` | https://console.cloud.google.com — enable Directions, Places, Distance Matrix APIs |
-| `YELP_API_KEY` | https://www.yelp.com/developers |
 | `STRIPE_API_KEY` | https://dashboard.stripe.com/test/apikeys (use `sk_test_...`) |
 
 > **Duffel sandbox**: Use a `duffel_test_...` token for test mode. Flight and hotel bookings are simulated and return real-format references. Switch to `duffel_live_...` for production.

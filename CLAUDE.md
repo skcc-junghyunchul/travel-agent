@@ -35,8 +35,8 @@ There are no tests or linter configs in this project yet. To add them: `pip inst
 |---|---|---|
 | `tools/search.py`, `tools/activities.py` | Tavily | Real-time web search |
 | `tools/flights.py`, `tools/hotels.py` | Duffel | Air API v1 for flights; Stays API v2 for hotels; use `duffel_test_...` token for sandbox |
-| `tools/restaurants.py` | Yelp Fusion | Booking is simulated (no public booking API) |
-| `tools/transportation.py` | Google Maps | Directions, Places, Distance Matrix APIs must all be enabled |
+| `tools/restaurants.py` | Google Maps Places API | Replaced Yelp (blocked on corporate networks); booking is simulated |
+| `tools/transportation.py` | Google Maps | Directions, Places, Distance Matrix, Geocoding APIs must all be enabled |
 | `tools/payment.py` | Stripe | Use `sk_test_...`; test card `4242424242424242` |
 | `tools/export.py` | openpyxl | No API; writes `.xlsx` locally |
 
