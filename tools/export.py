@@ -41,6 +41,14 @@ def _cell(ws, row, col, value, bold=False, alt=False):
     return cell
 
 
+def _num(val, default=0) -> float:
+    """Return val as float, falling back to default if None or non-numeric."""
+    try:
+        return float(val) if val is not None else float(default)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 def _autofit(ws, min_width=12, max_width=50):
     for col in ws.columns:
         max_len = max((len(str(c.value)) if c.value else 0) for c in col)
@@ -136,7 +144,7 @@ def export_itinerary_to_excel(itinerary_json: str, output_path: str = "") -> str
         for j, (label, amount) in enumerate(cost_items, start_row + 1):
             bold = label == "TOTAL"
             _cell(ws_ov, j, 1, label, bold=bold, alt=(j % 2 == 0))
-            _cell(ws_ov, j, 2, f"${amount:,.2f}" if isinstance(amount, (int, float)) else amount, bold=bold, alt=(j % 2 == 0))
+            _cell(ws_ov, j, 2, f"${_num(amount):,.2f}", bold=bold, alt=(j % 2 == 0))
 
     _autofit(ws_ov)
 
@@ -158,7 +166,7 @@ def export_itinerary_to_excel(itinerary_json: str, output_path: str = "") -> str
             for col, val in enumerate([
                 day.get("day"), day.get("date"), act.get("time"), "Activity",
                 act.get("name"), act.get("description"), act.get("location"),
-                act.get("duration"), f"${act.get('cost', 0):.2f}", act.get("booking_reference", "—"),
+                act.get("duration"), f"${_num(act.get('cost')):.2f}", act.get("booking_reference", "—"),
             ], 1):
                 _cell(ws_days, row, col, val, alt=alt)
             row += 1
@@ -178,7 +186,7 @@ def export_itinerary_to_excel(itinerary_json: str, output_path: str = "") -> str
             for col, val in enumerate([
                 day.get("day"), day.get("date"), "", "Transport",
                 tr.get("mode"), f"{tr.get('from_location')} → {tr.get('to_location')}",
-                "", tr.get("duration"), f"${tr.get('cost', 0):.2f}", "—",
+                "", tr.get("duration"), f"${_num(tr.get('cost')):.2f}", "—",
             ], 1):
                 _cell(ws_days, row, col, val, alt=alt)
             row += 1
@@ -209,7 +217,7 @@ def export_itinerary_to_excel(itinerary_json: str, output_path: str = "") -> str
                 ftype, fdata.get("airline"), fdata.get("flight_number"),
                 fdata.get("departure_airport"), fdata.get("arrival_airport"),
                 fdata.get("departure_time"), fdata.get("arrival_time"),
-                f"${fdata.get('price_per_person', 0):.2f}", fdata.get("booking_reference", "—"),
+                f"${_num(fdata.get('price_per_person')):.2f}", fdata.get("booking_reference", "—"),
             ], 1):
                 _cell(ws_fl, row, col, val, alt=row % 2 == 0)
             row += 1
@@ -231,11 +239,12 @@ def export_itinerary_to_excel(itinerary_json: str, output_path: str = "") -> str
                 datetime.strptime(acc.get("check_out", ""), "%Y-%m-%d")
                 - datetime.strptime(acc.get("check_in", ""), "%Y-%m-%d")
             ).days if acc.get("check_in") and acc.get("check_out") else ""
-            total = nights * acc.get("price_per_night", 0) if isinstance(nights, int) else ""
+            price_per_night = _num(acc.get("price_per_night"))
+            total = nights * price_per_night if isinstance(nights, int) else ""
             for col, val in enumerate([
                 acc.get("name"), acc.get("address"), acc.get("check_in"), acc.get("check_out"),
-                nights, f"${acc.get('price_per_night', 0):.2f}",
-                f"${total:.2f}" if isinstance(total, float) else total,
+                nights, f"${price_per_night:.2f}",
+                f"${total:.2f}" if isinstance(total, (int, float)) else total,
                 acc.get("booking_reference", "—"),
             ], 1):
                 _cell(ws_ac, row, col, val, alt=row % 2 == 0)
