@@ -29,6 +29,6 @@ def create_travel_agent():
         model=llm,
         tools=tools,
         checkpointer=memory,
-        state_modifier=SYSTEM_PROMPT,
+        prompt=SYSTEM_PROMPT,
     )
     return agent
